@@ -1,59 +1,309 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# ZKTeco Attendance Sync Application
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+A Laravel console application that retrieves attendance data from ZKTeco biometric devices and sends it to a remote server via API.
 
-## About Laravel
+## Features
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+- Connect to ZKTeco devices via TCP/IP
+- Retrieve attendance records (check-in/check-out data)
+- Send data to remote server in batches
+- Clear device records after successful sync
+- Connection testing mode
+- Detailed logging and error handling
+- Configurable batch sizes and retry logic
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## Requirements
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+- PHP 8.1 or higher
+- Composer
+- Network access to ZKTeco device
+- ZKTeco device must be configured for TCP/IP communication
 
-## Learning Laravel
+## Installation
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+The application is already set up in `/Users/melchorvalencia/Documents/zkteco-attendance`
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+## Configuration
 
-## Laravel Sponsors
+### 1. Configure ZKTeco Device
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+Update the `.env` file with your ZKTeco device details:
 
-### Premium Partners
+```env
+# ZKTeco Device Configuration
+ZKTECO_DEVICE_IP=192.168.1.201    # Your device IP address
+ZKTECO_DEVICE_PORT=4370           # Default ZKTeco port
+```
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+### 2. Configure Remote API
 
-## Contributing
+Set up your remote server API endpoint:
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+```env
+# Remote API Configuration
+REMOTE_API_URL=https://api.example.com/api/v1
+REMOTE_API_KEY=your-api-key-here
+REMOTE_API_TIMEOUT=30
+```
 
-## Code of Conduct
+### 3. Sync Settings (Optional)
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+```env
+# Sync Settings
+SYNC_BATCH_SIZE=100              # Records per batch
+AUTO_CLEAR_DEVICE=false          # Auto-clear after sync
+RETRY_FAILED_RECORDS=true
+MAX_RETRIES=3
+```
 
-## Security Vulnerabilities
+## Usage
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+Navigate to the project directory:
+
+```bash
+cd /Users/melchorvalencia/Documents/zkteco-attendance
+```
+
+### Basic Sync Command
+
+Sync attendance data from device to remote server:
+
+```bash
+php artisan attendance:sync
+```
+
+### Test Connections
+
+Test connectivity to both the ZKTeco device and remote API:
+
+```bash
+php artisan attendance:sync --test
+```
+
+### Sync with Auto-Clear
+
+Sync data and clear records from device after successful sync:
+
+```bash
+php artisan attendance:sync --clear
+```
+
+### Custom Batch Size
+
+Specify a custom batch size for sending records:
+
+```bash
+php artisan attendance:sync --batch-size=50
+```
+
+### Combined Options
+
+```bash
+php artisan attendance:sync --clear --batch-size=200
+```
+
+## Command Options
+
+| Option | Description |
+|--------|-------------|
+| `--test` | Test connection without syncing data |
+| `--clear` | Clear attendance records from device after successful sync |
+| `--batch-size=N` | Number of records to send per batch (default: 100) |
+
+## Scheduling (Optional)
+
+To run the sync automatically, add it to Laravel's scheduler in `app/Console/Kernel.php`:
+
+```php
+protected function schedule(Schedule $schedule)
+{
+    // Sync every hour
+    $schedule->command('attendance:sync --clear')
+             ->hourly()
+             ->withoutOverlapping();
+}
+```
+
+Then set up a cron job:
+
+```bash
+* * * * * cd /Users/melchorvalencia/Documents/zkteco-attendance && php artisan schedule:run >> /dev/null 2>&1
+```
+
+## API Endpoint Requirements
+
+Your remote server should have the following endpoints:
+
+### 1. Health Check (Optional)
+
+```
+GET /health
+Authorization: Bearer {API_KEY}
+```
+
+Response:
+```json
+{
+    "status": "ok"
+}
+```
+
+### 2. Sync Attendance Records
+
+```
+POST /attendance
+Authorization: Bearer {API_KEY}
+Content-Type: application/json
+```
+
+Request body:
+```json
+{
+    "records": [
+        {
+            "user_id": "12345",
+            "timestamp": "2025-11-06 09:30:00",
+            "verify_type": "Fingerprint",
+            "status": "Check In",
+            "raw_timestamp": 1730880600
+        }
+    ],
+    "device_info": {
+        "ip": "192.168.1.201",
+        "synced_at": "2025-11-06T09:35:00Z"
+    }
+}
+```
+
+Response:
+```json
+{
+    "success": true,
+    "message": "Records saved successfully",
+    "records_received": 100
+}
+```
+
+### 3. Get Sync Status (Optional)
+
+```
+GET /attendance/sync-status?device_ip=192.168.1.201
+Authorization: Bearer {API_KEY}
+```
+
+## Data Structure
+
+### Attendance Record Fields
+
+Each attendance record contains:
+
+- `user_id`: Employee/user ID from the device
+- `timestamp`: Human-readable timestamp (Y-m-d H:i:s)
+- `verify_type`: Authentication method (Fingerprint, Card, Face, Password, etc.)
+- `status`: Attendance type (Check In, Check Out, Break Out, Break In, etc.)
+- `raw_timestamp`: Unix timestamp
+
+### Verify Types
+
+- Password (0)
+- Fingerprint (1)
+- Card (2)
+- Fingerprint and Password (3)
+- Fingerprint and Card (4)
+- Face (15)
+
+### Status Types
+
+- Check In (0)
+- Check Out (1)
+- Break Out (2)
+- Break In (3)
+- Overtime In (4)
+- Overtime Out (5)
+
+## Troubleshooting
+
+### Cannot Connect to Device
+
+1. Verify the device IP address is correct
+2. Ensure the device is on the same network or accessible
+3. Check if port 4370 is open on your firewall
+4. Verify the device has TCP/IP communication enabled
+
+Test connection:
+```bash
+php artisan attendance:sync --test
+```
+
+### API Connection Failed
+
+1. Verify the API URL is correct
+2. Check if the API key is valid
+3. Ensure your server has internet access
+4. Check API server logs for errors
+
+### No Records Retrieved
+
+- The device may have no attendance records stored
+- Try creating a test attendance record on the device
+- Check device logs for any errors
+
+### Socket Errors
+
+If you see socket-related errors, ensure PHP sockets extension is enabled:
+
+```bash
+php -m | grep sockets
+```
+
+If not installed:
+```bash
+brew install php --with-sockets
+```
+
+## Logs
+
+Application logs are stored in `storage/logs/laravel.log`
+
+View recent logs:
+```bash
+tail -f storage/logs/laravel.log
+```
+
+Enable debug logging in `.env`:
+```env
+ZKTECO_DEBUG_LOGGING=true
+```
+
+## File Structure
+
+```
+app/
+├── Console/Commands/
+│   └── SyncAttendanceData.php    # Main console command
+├── Services/
+│   ├── ZKTecoService.php         # ZKTeco device communication
+│   └── RemoteApiService.php      # Remote API integration
+config/
+└── zkteco.php                     # Configuration file
+```
+
+## Security Considerations
+
+1. Keep your API key secure in the `.env` file
+2. Never commit `.env` to version control
+3. Use HTTPS for remote API communication
+4. Implement proper authentication on your remote API
+5. Consider encrypting sensitive data in transit
+
+## Support
+
+For issues or questions:
+
+1. Check the logs: `storage/logs/laravel.log`
+2. Run connection test: `php artisan attendance:sync --test`
+3. Verify device and API configurations in `.env`
 
 ## License
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+This application is provided as-is for attendance management purposes.
