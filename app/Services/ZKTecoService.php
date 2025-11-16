@@ -4,31 +4,19 @@ namespace App\Services;
 
 use Exception;
 use Illuminate\Support\Facades\Log;
+use Jmrashed\Zkteco\Lib\ZKTeco;
 
 class ZKTecoService
 {
-    private $socket;
-    private $ip;
-    private $port;
-    private $sessionId = 0;
-    private $replyId = 0;
-
-    // Command constants
-    const CMD_CONNECT = 1000;
-    const CMD_EXIT = 1001;
-    const CMD_ENABLE_DEVICE = 1002;
-    const CMD_DISABLE_DEVICE = 1003;
-    const CMD_GET_ATTENDANCE = 13;
-    const CMD_CLEAR_ATTENDANCE = 14;
-    const CMD_USER_WKM = 88;
-    const CMD_USERTEMP_RRQ = 9;
-    const CMD_GET_TIME = 201;
-    const CMD_SET_TIME = 202;
+    private ZKTeco $zk;
+    private string $ip;
+    private int $port;
 
     public function __construct(string $ip, int $port = 4370)
     {
         $this->ip = $ip;
         $this->port = $port;
+        $this->zk = new ZKTeco($ip, $port);
     }
 
     /**
@@ -37,26 +25,14 @@ class ZKTecoService
     public function connect(): bool
     {
         try {
-            $this->socket = socket_create(AF_INET, SOCK_DGRAM, SOL_UDP);
+            $connected = $this->zk->connect();
 
-            if ($this->socket === false) {
-                throw new Exception("Failed to create socket: " . socket_strerror(socket_last_error()));
-            }
-
-            socket_set_option($this->socket, SOL_SOCKET, SO_RCVTIMEO, ['sec' => 10, 'usec' => 0]);
-            socket_set_option($this->socket, SOL_SOCKET, SO_SNDTIMEO, ['sec' => 10, 'usec' => 0]);
-
-            $command = $this->createCommand(self::CMD_CONNECT, '');
-            $this->sendCommand($command);
-
-            $reply = $this->receiveReply();
-
-            if ($reply) {
-                $this->sessionId = unpack('v', substr($reply, 4, 2))[1];
+            if ($connected) {
                 Log::info("Connected to ZKTeco device at {$this->ip}:{$this->port}");
                 return true;
             }
 
+            Log::error("Failed to connect to ZKTeco device at {$this->ip}:{$this->port}");
             return false;
         } catch (Exception $e) {
             Log::error("ZKTeco connection error: " . $e->getMessage());
@@ -70,12 +46,8 @@ class ZKTecoService
     public function disconnect(): bool
     {
         try {
-            if ($this->socket) {
-                $command = $this->createCommand(self::CMD_EXIT, '');
-                $this->sendCommand($command);
-                socket_close($this->socket);
-                Log::info("Disconnected from ZKTeco device");
-            }
+            $this->zk->disconnect();
+            Log::info("Disconnected from ZKTeco device");
             return true;
         } catch (Exception $e) {
             Log::error("ZKTeco disconnect error: " . $e->getMessage());
@@ -84,49 +56,22 @@ class ZKTecoService
     }
 
     /**
-     * Disable device (prevents users from using the device)
-     */
-    public function disableDevice(): bool
-    {
-        $command = $this->createCommand(self::CMD_DISABLE_DEVICE, '');
-        $this->sendCommand($command);
-        return $this->receiveReply() !== false;
-    }
-
-    /**
-     * Enable device
-     */
-    public function enableDevice(): bool
-    {
-        $command = $this->createCommand(self::CMD_ENABLE_DEVICE, '');
-        $this->sendCommand($command);
-        return $this->receiveReply() !== false;
-    }
-
-    /**
      * Get attendance records from device
      */
     public function getAttendance(): array
     {
         try {
-            $this->disableDevice();
+            $this->zk->disableDevice();
 
-            $command = $this->createCommand(self::CMD_GET_ATTENDANCE, '');
-            $this->sendCommand($command);
+            $rawAttendance = $this->zk->getAttendance();
 
-            $attendanceData = [];
-            $reply = $this->receiveReply();
+            $this->zk->enableDevice();
 
-            if ($reply) {
-                $attendanceData = $this->parseAttendanceData($reply);
-            }
-
-            $this->enableDevice();
-
-            return $attendanceData;
+            // Transform the raw data to match our expected format
+            return $this->transformAttendanceData($rawAttendance);
         } catch (Exception $e) {
             Log::error("Error getting attendance: " . $e->getMessage());
-            $this->enableDevice();
+            $this->zk->enableDevice();
             return [];
         }
     }
@@ -137,146 +82,43 @@ class ZKTecoService
     public function clearAttendance(): bool
     {
         try {
-            $this->disableDevice();
+            $this->zk->disableDevice();
 
-            $command = $this->createCommand(self::CMD_CLEAR_ATTENDANCE, '');
-            $this->sendCommand($command);
-            $result = $this->receiveReply();
+            $result = $this->zk->clearAttendance();
 
-            $this->enableDevice();
+            $this->zk->enableDevice();
 
-            return $result !== false;
+            if ($result) {
+                Log::info("Cleared attendance records from device");
+                return true;
+            }
+
+            return false;
         } catch (Exception $e) {
             Log::error("Error clearing attendance: " . $e->getMessage());
-            $this->enableDevice();
+            $this->zk->enableDevice();
             return false;
         }
     }
 
     /**
-     * Create command packet
+     * Transform attendance data from package format to our application format
      */
-    private function createCommand(int $command, string $data = ''): string
+    private function transformAttendanceData(array $rawData): array
     {
-        $buf = pack('SSSS', $command, 0, $this->sessionId, $this->replyId) . $data;
+        $transformed = [];
 
-        $checksum = $this->createChecksum($buf);
-        $requestData = pack('SSSS', $command, $checksum, $this->sessionId, $this->replyId) . $data;
-
-        $this->replyId = ($this->replyId + 1) % 0xFFFF;
-
-        return $requestData;
-    }
-
-    /**
-     * Create checksum for packet
-     */
-    private function createChecksum(string $buf): int
-    {
-        $checksum = 0;
-        for ($i = 0; $i < strlen($buf); $i += 2) {
-            if ($i == strlen($buf) - 1) {
-                $checksum += ord($buf[$i]);
-            } else {
-                $checksum += unpack('v', substr($buf, $i, 2))[1];
-            }
-        }
-
-        $checksum = $checksum & 0xFFFF;
-
-        while ($checksum > 0xFFFF) {
-            $checksum = ($checksum >> 16) + ($checksum & 0xFFFF);
-        }
-
-        return ~$checksum & 0xFFFF;
-    }
-
-    /**
-     * Send command to device
-     */
-    private function sendCommand(string $command): void
-    {
-        socket_sendto($this->socket, $command, strlen($command), 0, $this->ip, $this->port);
-    }
-
-    /**
-     * Receive reply from device
-     */
-    private function receiveReply()
-    {
-        $reply = '';
-        $from = '';
-        $port = 0;
-
-        $bytes = @socket_recvfrom($this->socket, $reply, 1024, 0, $from, $port);
-
-        if ($bytes === false || $bytes === 0) {
-            return false;
-        }
-
-        return $reply;
-    }
-
-    /**
-     * Parse attendance data from device response
-     */
-    private function parseAttendanceData(string $data): array
-    {
-        $attendanceRecords = [];
-
-        // Skip header (first 8 bytes)
-        $data = substr($data, 8);
-
-        // Each attendance record is typically 40 bytes
-        $recordSize = 40;
-        $totalRecords = floor(strlen($data) / $recordSize);
-
-        for ($i = 0; $i < $totalRecords; $i++) {
-            $record = substr($data, $i * $recordSize, $recordSize);
-
-            if (strlen($record) < $recordSize) {
-                continue;
-            }
-
-            $parsed = $this->parseAttendanceRecord($record);
-
-            if ($parsed) {
-                $attendanceRecords[] = $parsed;
-            }
-        }
-
-        return $attendanceRecords;
-    }
-
-    /**
-     * Parse individual attendance record
-     */
-    private function parseAttendanceRecord(string $record): ?array
-    {
-        try {
-            // Extract user ID (first 9 bytes, null-terminated string)
-            $userId = rtrim(substr($record, 0, 9), "\0");
-
-            // Extract timestamp (bytes 27-30, 4 bytes)
-            $timestamp = unpack('V', substr($record, 27, 4))[1];
-
-            // Extract verify type (byte 26)
-            $verifyType = ord($record[26]);
-
-            // Extract status (byte 31)
-            $status = ord($record[31]);
-
-            return [
-                'user_id' => $userId,
-                'timestamp' => date('Y-m-d H:i:s', $timestamp),
-                'verify_type' => $this->getVerifyTypeName($verifyType),
-                'status' => $this->getStatusName($status),
-                'raw_timestamp' => $timestamp,
+        foreach ($rawData as $record) {
+            $transformed[] = [
+                'user_id' => $record['id'] ?? $record['uid'] ?? 'Unknown',
+                'timestamp' => $record['timestamp'] ?? date('Y-m-d H:i:s'),
+                'verify_type' => $this->getVerifyTypeName($record['type'] ?? 0),
+                'status' => $this->getStatusName($record['state'] ?? 0),
+                'raw_timestamp' => strtotime($record['timestamp'] ?? 'now'),
             ];
-        } catch (Exception $e) {
-            Log::warning("Error parsing attendance record: " . $e->getMessage());
-            return null;
         }
+
+        return $transformed;
     }
 
     /**
