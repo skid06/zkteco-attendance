@@ -1,0 +1,49 @@
+# Simplified single-stage Dockerfile (fallback option)
+# Use this if the multi-stage build has issues
+
+FROM php:8.2-cli
+
+# Install all dependencies in one go
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        git \
+        curl \
+        zip \
+        unzip \
+        libzip-dev \
+        libsqlite3-dev \
+        autoconf \
+        g++ \
+        make \
+        pkg-config \
+    && docker-php-ext-install -j$(nproc) \
+        sockets \
+        zip \
+        pdo_sqlite \
+    && apt-get purge -y --auto-remove autoconf g++ make pkg-config \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Composer
+COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+
+# Set working directory
+WORKDIR /app
+
+# Copy application files
+COPY . .
+
+# Install PHP dependencies
+RUN composer install --no-dev --optimize-autoloader --no-interaction --no-progress
+
+# Create necessary directories and set permissions
+RUN mkdir -p storage/logs storage/framework/cache storage/framework/sessions storage/framework/views bootstrap/cache database && \
+    touch database/database.sqlite && \
+    chown -R www-data:www-data storage bootstrap/cache database && \
+    chmod -R 775 storage bootstrap/cache database
+
+# Switch to www-data user
+USER www-data
+
+# Default command
+CMD ["php", "artisan", "attendance:sync"]

@@ -3,14 +3,18 @@
 # Stage 1: Build stage with Composer
 FROM php:8.2-cli AS builder
 
-# Install system dependencies
+# Install system dependencies and build tools
 RUN apt-get update && apt-get install -y \
     git \
     curl \
     libzip-dev \
+    libsqlite3-dev \
     zip \
     unzip \
-    && docker-php-ext-install \
+    autoconf \
+    g++ \
+    make \
+    && docker-php-ext-install -j$(nproc) \
     sockets \
     zip \
     pdo_sqlite \
@@ -35,7 +39,8 @@ FROM php:8.2-cli
 # Install runtime dependencies only
 RUN apt-get update && apt-get install -y \
     libzip-dev \
-    && docker-php-ext-install \
+    libsqlite3-dev \
+    && docker-php-ext-install -j$(nproc) \
     sockets \
     zip \
     pdo_sqlite \
