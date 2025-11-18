@@ -33,11 +33,18 @@ coverage
 *.coverage
 
 # Storage and cache (will be created in container)
+# Keep .gitkeep files to preserve directory structure
 storage/logs/*
+!storage/logs/.gitkeep
 storage/framework/cache/*
+!storage/framework/cache/.gitkeep
+!storage/framework/cache/data/.gitkeep
 storage/framework/sessions/*
+!storage/framework/sessions/.gitkeep
 storage/framework/views/*
+!storage/framework/views/.gitkeep
 bootstrap/cache/*
+!bootstrap/cache/.gitkeep
 .phpunit.cache
 
 # Database (will be mounted as volume)
@@ -53,7 +60,8 @@ docs
 Thumbs.db
 
 # Vendor (will be installed during build)
-vendor
+# Note: Don't ignore vendor in builder stage, but it will be overwritten by composer install
+# vendor
 
 # Build artifacts
 public/build

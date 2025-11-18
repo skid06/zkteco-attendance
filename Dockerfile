@@ -27,11 +27,20 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 # Set working directory
 WORKDIR /app
 
-# Copy composer files
-COPY composer.json composer.lock ./
+# Copy application files (excluding items in .dockerignore)
+COPY . .
+
+# Create necessary directories before composer install
+RUN mkdir -p \
+    storage/logs \
+    storage/framework/cache/data \
+    storage/framework/sessions \
+    storage/framework/views \
+    bootstrap/cache \
+    database
 
 # Install PHP dependencies (production only, no dev dependencies)
-RUN composer install --no-dev --optimize-autoloader --no-interaction --no-progress
+RUN composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist
 
 # Stage 2: Production runtime
 FROM php:8.2-cli
