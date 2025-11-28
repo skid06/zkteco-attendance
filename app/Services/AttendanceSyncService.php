@@ -43,7 +43,7 @@ class AttendanceSyncService
                     'Accept' => 'application/json',
                     'Content-Type' => 'application/json',
                 ])
-                ->post($this->baseUrl . '/attendance', [
+                ->post($this->baseUrl, [
                     'records' => $records,
                     'device_info' => array_merge($deviceInfo, [
                         'synced_at' => now()->toIso8601String(),
