@@ -38,6 +38,7 @@ class AttendanceSyncService
             Log::info("Sending " . count($records) . " attendance records to remote server");
 
             $response = Http::timeout($this->timeout)
+                ->withOptions(['verify' => false])
                 ->withHeaders([
                     'Authorization' => 'Bearer ' . $this->apiKey,
                     'Accept' => 'application/json',
@@ -138,6 +139,7 @@ class AttendanceSyncService
     {
         try {
             $response = Http::timeout(10)
+                ->withOptions(['verify' => false])
                 ->withHeaders([
                     'Authorization' => 'Bearer ' . $this->apiKey,
                     'Accept' => 'application/json',
