@@ -10,7 +10,7 @@
 // Configuration
 define('LOG_DIR', dirname(__FILE__) . '/logs');
 define('LOG_FILE', LOG_DIR . '/attendance-' . date('Y-m-d') . '.log');
-define('API_KEY', 'your-api-key-here'); // Change this to match your .env ATTENDANCE_API_KEY
+define('API_KEY', '57f6a5c35acc14c5111cad9dda7c8ce4e10875db542653dcf08be15042ea4414'); // Change this to match your .env ATTENDANCE_API_KEY
 
 // Create logs directory if it doesn't exist
 if (!is_dir(LOG_DIR)) {
