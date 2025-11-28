@@ -136,13 +136,28 @@ class DahuaDevice implements AttendanceDeviceInterface
             $record = (array) $record;
 
             $transformed[] = [
+                // Standardized fields
                 'user_id' => $record['PersonID'] ?? $record['user_id'] ?? 'Unknown',
                 'timestamp' => isset($record['AttendanceDateTime']) && $record['AttendanceDateTime'] > 0
                     ? date('Y-m-d H:i:s', $record['AttendanceDateTime'])
                     : ($record['AttendanceTime'] ?? date('Y-m-d H:i:s')),
-                'verify_type' => $this->getVerifyTypeName($record['verify_type'] ?? $record['VerifyType'] ?? 0),
-                'status' => $this->getStatusName($record['status'] ?? $record['InOutState'] ?? 0),
+                'verify_type' => $this->getVerifyTypeName($record['AttendanceMethod'] ?? $record['verify_type'] ?? 0),
+                'status' => $this->getStatusName($record['AttendanceState'] ?? $record['status'] ?? 0),
                 'raw_timestamp' => $record['AttendanceDateTime'] ?? strtotime($record['AttendanceTime'] ?? 'now'),
+
+                // Additional Dahua-specific fields
+                'person_id' => $record['PersonID'] ?? null,
+                'person_name' => $record['PersonName'] ?? null,
+                'person_card_no' => $record['PersonCardNo'] ?? null,
+                'attendance_datetime' => $record['AttendanceDateTime'] ?? null,
+                'attendance_state' => $record['AttendanceState'] ?? null,
+                'attendance_method' => $record['AttendanceMethod'] ?? null,
+                'device_ip_address' => $record['DeviceIPAddress'] ?? null,
+                'device_name' => $record['DeviceName'] ?? null,
+                'snapshots_path' => $record['SnapshotsPath'] ?? null,
+                'handler' => $record['Handler'] ?? null,
+                'attendance_utc_time' => $record['AttendanceUtcTime'] ?? null,
+                'remarks' => $record['Remarks'] ?? null,
             ];
         }
 
